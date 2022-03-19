@@ -20,6 +20,9 @@
 <div class="container mt-5">
     <h3 class="text-center alert-link">url shortener</h3>
     <div class="row justify-content-center">
+        @foreach ($errors->all() as $error)
+            {{ $error }}
+        @endforeach
 
             <p class="container text-center text-danger errors"></p>
 

@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\LinkRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use App\Link;
-use Validator;
+use App\Code;
 
 /**
  * Class LinkController
@@ -19,36 +20,30 @@ class LinkController extends Controller
     public function index()
     {
         return view('welcome');
+
     }
 
     /**
      * @param Request $request
      * @return \Illuminate\Http\RedirectResponse
      */
-    public function shorten(Request $request)
+    public function shorten(LinkRequest $request)
     {
-        $input = $request->all();
-        // валидатор url
-        $validator = Validator::make($input, [
-            'url' => 'required|url|min:5',
-        ]);
-        if ($validator->fails()) {
-            return response($validator->errors());
+        $url = Link::whereUrl($request->get('url'))->with('code')->first();
+        if ($url) {
+            return response([
+                'success' => false,
+                'message' => 'Такая ссылка уже есть: <a href="' . url("/{$url->code->code}") . '" target="_blank">' . url("/{$url->code->code}") . '</a>'
+            ]);
         } else {
-            $url = Link::whereUrl($request->get('url'))->first();
-            if ($url) {
-                return response('Такая ссылка уже есть: <a href="' . url("/{$url->code}") . '" target="_blank">' . url("/{$url->code}") . '</a>');
-            } else {
-                do {
-                    $code = Str::random(6);
-                } while (Link::where('code', '=', $code)->count() > 0);
-                $link = new Link([
-                    'url' => $request->get('url'),
-                    'code' => $code,
-                ]);
-                $link->save();
-                return response('Сокращенная ссылка: <a id="short_url" href="' . url("/{$link->code}") . '" target="_blank">' . url("/{$link->code}") . '</a>');
-            }
+            $code = Code::where('active', 1)->first();
+            Link::create(['url' => $request->get('url'), 'code_id' => $code->id]);
+            $code->active = false; $code->save();
+
+            return response([
+                'success' => true,
+                'message' =>  'Сокращенная ссылка: <a id="short_url" href="' . url("/{$code->code}") . '" target="_blank">' . url("/{$code->code}") . '</a>'
+            ]);
         }
     }
 
@@ -56,13 +51,10 @@ class LinkController extends Controller
      * @param $code
      * @return \Illuminate\Http\RedirectResponse|\Illuminate\Routing\Redirector
      */
-    public function get($code)
+    public function redirect($code)
     {
-        $link = Link::where('code', '=', $code)->first();
-        if ($link) {
-            return redirect($link->url);
-        } else {
-            return redirect('/')->withErrors('Неверная ссылка!');
-        }
+        $code = Code::where(['code' => $code, 'active' => 1])->with('link')->first();
+
+        return is_null($code) ? redirect('/')->withErrors('Неверная ссылка!') : redirect($code->link->url);
     }
 }
